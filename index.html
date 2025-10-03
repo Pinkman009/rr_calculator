@@ -1,17 +1,13 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-<button onclick="closeApp()">Закрыть</button>
-
-
-  
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Умный трейдинг-калькулятор</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
-    /* Стили остаются без изменений */
+    /* Базовые стили остаются без изменений */
     :root {
       --bg-body: #f7f9fc;
       --bg-card: #eef7ff;
@@ -302,6 +298,92 @@
       border-color: #555;
     }
 
+    /* Стили для мобильной истории сделок */
+    .mobile-trade-card {
+      background: white;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      border: 1px solid #e0e0e0;
+    }
+
+    body.dark-mode .mobile-trade-card {
+      background: #2d2d2d;
+      border-color: #444;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    }
+
+    .mobile-trade-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 8px;
+    }
+
+    body.dark-mode .mobile-trade-header {
+      border-bottom-color: #444;
+    }
+
+    .mobile-trade-ticker {
+      font-weight: bold;
+      font-size: 16px;
+    }
+
+    .mobile-trade-date {
+      font-size: 12px;
+      color: #7f8c8d;
+    }
+
+    .mobile-trade-details {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .mobile-trade-detail {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .mobile-trade-label {
+      font-size: 11px;
+      color: #7f8c8d;
+      margin-bottom: 2px;
+    }
+
+    .mobile-trade-value {
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .mobile-trade-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #eee;
+    }
+
+    body.dark-mode .mobile-trade-actions {
+      border-top-color: #444;
+    }
+
+    .mobile-trade-result {
+      font-weight: bold;
+      font-size: 16px;
+    }
+
+    .mobile-trade-buttons {
+      display: flex;
+      gap: 5px;
+    }
+
+    /* Медиа-запросы для адаптивности */
     @media (max-width: 768px) {
       .container {
         padding: 10px;
@@ -360,6 +442,26 @@
         width: 16px;
         height: 16px;
       }
+      
+      /* Скрываем таблицу на мобильных */
+      .desktop-history {
+        display: none;
+      }
+      
+      /* Показываем мобильную версию */
+      .mobile-history {
+        display: block;
+      }
+    }
+
+    @media (min-width: 769px) {
+      .mobile-history {
+        display: none;
+      }
+      
+      .desktop-history {
+        display: block;
+      }
     }
 
     @media (max-width: 480px) {
@@ -401,6 +503,21 @@
       .trade-actions {
         flex-direction: column;
         gap: 2px;
+      }
+      
+      .mobile-trade-details {
+        grid-template-columns: 1fr;
+      }
+      
+      .mobile-trade-actions {
+        flex-direction: column;
+        gap: 8px;
+        align-items: flex-start;
+      }
+      
+      .mobile-trade-buttons {
+        width: 100%;
+        justify-content: space-between;
       }
     }
   </style>
@@ -512,24 +629,32 @@
       <button class="danger" onclick="clearHistory()">🗑️ Очистить историю</button>
     </div>
     
-    <div class="history" id="history">
-      <table id="historyTable">
-        <thead>
-          <tr>
-            <th>Дата</th>
-            <th>Монета</th>
-            <th>Вход → Выход</th>
-            <th>R:R</th>
-            <th>Результат</th>
-            <th>Тип закрытия</th>
-            <th>Плечо</th>
-            <th>Действия</th>
-          </tr>
-        </thead>
-        <tbody id="historyBody">
-          <tr><td colspan="8" class="empty">Пока нет сделок</td></tr>
-        </tbody>
-      </table>
+    <div class="history">
+      <!-- Десктоп версия -->
+      <div class="desktop-history">
+        <table id="historyTable">
+          <thead>
+            <tr>
+              <th>Дата</th>
+              <th>Монета</th>
+              <th>Вход → Выход</th>
+              <th>R:R</th>
+              <th>Результат</th>
+              <th>Тип закрытия</th>
+              <th>Плечо</th>
+              <th>Действия</th>
+            </tr>
+          </thead>
+          <tbody id="historyBody">
+            <tr><td colspan="8" class="empty">Пока нет сделок</td></tr>
+          </tbody>
+        </table>
+      </div>
+      
+      <!-- Мобильная версия -->
+      <div class="mobile-history" id="mobileHistory">
+        <div class="empty">Пока нет сделок</div>
+      </div>
     </div>
 
     <h3>📈 График роста депозита</h3>
@@ -758,7 +883,6 @@
       alert(`Сделка закрыта по стоп-лоссу. Убыток: ${currentCalculation.moneyRiskRub.toFixed(2)} руб`);
     }
 
-    // Остальные функции остаются без изменений
     function deleteTrade(index) {
       if (confirm("Удалить эту сделку?")) {
         trades.splice(index, 1);
@@ -807,11 +931,15 @@
 
     function updateHistory() {
       const tbody = document.getElementById("historyBody");
+      const mobileHistory = document.getElementById("mobileHistory");
+      
       if (trades.length === 0) {
         tbody.innerHTML = '<tr><td colspan="8" class="empty">Пока нет сделок</td></tr>';
+        mobileHistory.innerHTML = '<div class="empty">Пока нет сделок</div>';
         return;
       }
 
+      // Обновляем десктоп версию
       tbody.innerHTML = '';
       trades.slice().reverse().forEach((t, originalIndex) => {
         const index = trades.length - 1 - originalIndex;
@@ -848,6 +976,64 @@
           </td>
         `;
         tbody.appendChild(row);
+      });
+
+      // Обновляем мобильную версию
+      mobileHistory.innerHTML = '';
+      trades.slice().reverse().forEach((t, originalIndex) => {
+        const index = trades.length - 1 - originalIndex;
+        const isProfit = parseFloat(t.profitMoney) >= 0;
+        const profitClass = isProfit ? 'profit-positive' : 'profit-negative';
+        const profitSign = isProfit ? '+' : '';
+        
+        let entryExitText = `${t.entry} → `;
+        if (t.closedBy === 'tp') {
+          entryExitText += `TP: ${t.tp1}`;
+          if (t.tp2 && parseFloat(t.tp2) > 0) entryExitText += `, ${t.tp2}`;
+          if (t.tp3 && parseFloat(t.tp3) > 0) entryExitText += `, ${t.tp3}`;
+        } else {
+          entryExitText += `SL: ${t.sl}`;
+        }
+
+        const card = document.createElement("div");
+        card.className = "mobile-trade-card";
+        card.innerHTML = `
+          <div class="mobile-trade-header">
+            <div class="mobile-trade-ticker">${t.ticker}</div>
+            <div class="mobile-trade-date">${t.date}</div>
+          </div>
+          <div class="mobile-trade-details">
+            <div class="mobile-trade-detail">
+              <div class="mobile-trade-label">Вход → Выход</div>
+              <div class="mobile-trade-value">${entryExitText}</div>
+            </div>
+            <div class="mobile-trade-detail">
+              <div class="mobile-trade-label">R:R</div>
+              <div class="mobile-trade-value ${t.rr >= 2 ? 'rr-good' : t.rr >= 1 ? 'rr-warn' : ''}">${t.rr}</div>
+            </div>
+            <div class="mobile-trade-detail">
+              <div class="mobile-trade-label">Плечо</div>
+              <div class="mobile-trade-value">x${t.leverage}</div>
+            </div>
+            <div class="mobile-trade-detail">
+              <div class="mobile-trade-label">Тип закрытия</div>
+              <div class="mobile-trade-value">
+                <select class="close-type-select" onchange="updateTradeCloseType(${index}, this.value)">
+                  <option value="tp" ${t.closedBy === 'tp' ? 'selected' : ''}>по TP</option>
+                  <option value="sl" ${t.closedBy === 'sl' ? 'selected' : ''}>по стопу</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="mobile-trade-actions">
+            <div class="mobile-trade-result ${profitClass}">${profitSign}${t.profitMoney} руб</div>
+            <div class="mobile-trade-buttons">
+              <button class="edit-trade" onclick="editTrade(${index})" title="Редактировать сделку">✎</button>
+              <button class="delete-trade" onclick="deleteTrade(${index})" title="Удалить сделку">×</button>
+            </div>
+          </div>
+        `;
+        mobileHistory.appendChild(card);
       });
     }
 
@@ -1068,8 +1254,8 @@
       const isCurrentlyDark = document.body.classList.contains('dark-mode');
       enableDarkMode(!isCurrentlyDark);
     });
-
-    <script>
+	
+	    <script>
   function closeApp() {
     if (window.Telegram && Telegram.WebApp) {
       Telegram.WebApp.close();
@@ -1080,7 +1266,7 @@
   console.log('Telegram WebApp:', Telegram.WebApp);
 </script>
 
-  
+
   </script>
 </body>
 </html>
