@@ -4,16 +4,6 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <button onclick="closeApp()">Закрыть</button>
 
-<script>
-  function closeApp() {
-    if (window.Telegram && Telegram.WebApp) {
-      Telegram.WebApp.close();
-    }
-  }
-
-  // Показать, что всё работает
-  console.log('Telegram WebApp:', Telegram.WebApp);
-</script>
 
   
   <meta charset="UTF-8" />
@@ -1078,6 +1068,19 @@
       const isCurrentlyDark = document.body.classList.contains('dark-mode');
       enableDarkMode(!isCurrentlyDark);
     });
+
+    <script>
+  function closeApp() {
+    if (window.Telegram && Telegram.WebApp) {
+      Telegram.WebApp.close();
+    }
+  }
+
+  // Показать, что всё работает
+  console.log('Telegram WebApp:', Telegram.WebApp);
+</script>
+
+  
   </script>
 </body>
 </html>
