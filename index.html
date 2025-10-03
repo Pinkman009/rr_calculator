@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Умный трейдинг-калькулятор</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     /* Стили остаются без изменений */
     :root {
@@ -1064,20 +1063,6 @@
       const isCurrentlyDark = document.body.classList.contains('dark-mode');
       enableDarkMode(!isCurrentlyDark);
     });
-
-
-    <button onclick="closeApp()">Закрыть</button>
-
-<script>
-  function closeApp() {
-    if (window.Telegram && Telegram.WebApp) {
-      Telegram.WebApp.close();
-    }
-  }
-
-  // Показать, что всё работает
-  console.log('Telegram WebApp:', Telegram.WebApp);
-</script>
   </script>
 </body>
 </html>
