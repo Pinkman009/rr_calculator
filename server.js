@@ -9,7 +9,7 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(cors({
   origin: [
-    'https://yourusername.github.io',
+    'https://Pinkman009.github.io',
     'http://localhost:3000',
     'http://127.0.0.1:5500',
     'http://localhost:8080'
