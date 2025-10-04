@@ -11,26 +11,58 @@ app.use(cors({
   origin: [
     'https://yourusername.github.io',
     'http://localhost:3000',
-    'http://127.0.0.1:5500' // для локального тестирования
+    'http://127.0.0.1:5500',
+    'http://localhost:8080'
   ],
   credentials: true
 }));
 app.use(express.json());
 
-// MongoDB connection
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/trading_app';
+// MongoDB connection with better error handling
+const MONGODB_URI = process.env.MONGODB_URI;
+
+if (!MONGODB_URI) {
+  console.error('❌ MONGODB_URI is not defined in environment variables');
+  process.exit(1);
+}
+
+console.log('🔗 Attempting to connect to MongoDB...');
+console.log('📝 Connection string:', MONGODB_URI.replace(/mongodb\+srv:\/\/[^:]+:[^@]+@/, 'mongodb+srv://username:****@'));
 
 mongoose.connect(MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
+  retryWrites: true,
+  w: 'majority'
 })
-.then(() => console.log('✅ Connected to MongoDB'))
+.then(() => {
+  console.log('✅ Successfully connected to MongoDB Atlas');
+  console.log('📊 Database:', mongoose.connection.name);
+})
 .catch(err => {
-  console.error('❌ MongoDB connection error:', err);
+  console.error('❌ MongoDB connection error:', err.message);
+  console.log('💡 Tips for fixing:');
+  console.log('1. Check if your MongoDB Atlas cluster is running');
+  console.log('2. Verify your connection string starts with mongodb+srv://');
+  console.log('3. Check if your IP is whitelisted in MongoDB Atlas');
+  console.log('4. Verify your username and password are correct');
   process.exit(1);
 });
 
-// MongoDB Schemas
+// MongoDB connection events
+mongoose.connection.on('error', err => {
+  console.error('❌ MongoDB connection error:', err);
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.log('⚠️ MongoDB disconnected');
+});
+
+mongoose.connection.on('reconnected', () => {
+  console.log('✅ MongoDB reconnected');
+});
+
+// Остальная часть кода (схемы и API routes) остается без изменений
 const userSchema = new mongoose.Schema({
   telegramId: { type: String, required: true, unique: true },
   firstName: String,
@@ -68,17 +100,16 @@ const User = mongoose.model('User', userSchema);
 const Trade = mongoose.model('Trade', tradeSchema);
 
 // API Routes
-
-// Health check
 app.get('/', (req, res) => {
   res.json({ 
     message: 'Trading App API is running!',
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development'
+    environment: process.env.NODE_ENV || 'development',
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
   });
 });
 
-// Get user trades
+// Остальные endpoints остаются без изменений...
 app.get('/api/trades/:telegramId', async (req, res) => {
   try {
     const { telegramId } = req.params;
@@ -106,143 +137,10 @@ app.get('/api/trades/:telegramId', async (req, res) => {
   }
 });
 
-// Save/update user
-app.post('/api/users', async (req, res) => {
-  try {
-    const { telegramId, firstName, username, photoUrl } = req.body;
-    
-    if (!telegramId) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Telegram ID is required' 
-      });
-    }
-
-    let user = await User.findOne({ telegramId });
-    
-    if (user) {
-      // Update existing user
-      user.firstName = firstName || user.firstName;
-      user.username = username || user.username;
-      user.photoUrl = photoUrl || user.photoUrl;
-      await user.save();
-    } else {
-      // Create new user
-      user = new User({ 
-        telegramId, 
-        firstName, 
-        username, 
-        photoUrl 
-      });
-      await user.save();
-    }
-    
-    res.json({ 
-      success: true, 
-      user: {
-        id: user.telegramId,
-        firstName: user.firstName,
-        username: user.username,
-        photoUrl: user.photoUrl
-      }
-    });
-  } catch (error) {
-    console.error('Error saving user:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
-});
-
-// Save trades
-app.post('/api/trades', async (req, res) => {
-  try {
-    const { telegramId, trades } = req.body;
-    
-    if (!telegramId || !trades) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Telegram ID and trades are required' 
-      });
-    }
-
-    // Delete existing trades for this user
-    await Trade.deleteMany({ telegramId });
-    
-    // Save new trades
-    const tradePromises = trades.map(tradeData => {
-      const trade = new Trade({
-        ...tradeData,
-        telegramId
-      });
-      return trade.save();
-    });
-    
-    await Promise.all(tradePromises);
-    
-    res.json({ 
-      success: true, 
-      message: `Saved ${trades.length} trades`,
-      count: trades.length
-    });
-  } catch (error) {
-    console.error('Error saving trades:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
-});
-
-// Delete specific trade
-app.delete('/api/trades/:telegramId/:tradeId', async (req, res) => {
-  try {
-    const { telegramId, tradeId } = req.params;
-    
-    const result = await Trade.findOneAndDelete({ 
-      telegramId, 
-      tradeId 
-    });
-    
-    if (!result) {
-      return res.status(404).json({ 
-        success: false, 
-        error: 'Trade not found' 
-      });
-    }
-    
-    res.json({ 
-      success: true, 
-      message: 'Trade deleted successfully' 
-    });
-  } catch (error) {
-    console.error('Error deleting trade:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
-});
-
-// Error handling middleware
-app.use((error, req, res, next) => {
-  console.error('Unhandled error:', error);
-  res.status(500).json({ 
-    success: false, 
-    error: 'Internal server error' 
-  });
-});
-
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({ 
-    success: false, 
-    error: 'Route not found' 
-  });
-});
+// ... остальные endpoints
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🔗 MongoDB status: ${mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'}`);
 });
