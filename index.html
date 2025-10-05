@@ -1018,34 +1018,36 @@
       }
     }
 
-    async function saveTradesToServer() {
-      if (!currentUser) return;
-      
-      try {
-        updateSyncStatus('Синхронизация...', 'loading');
-        
-        const response = await fetch(`${SERVER_URL}/trades`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            telegramId: currentUser.id,
-            trades: trades
-          })
-        });
-        
-        if (!response.ok) throw new Error('Ошибка сохранения сделок');
-        
-        const result = await response.json();
-        updateSyncStatus('Данные синхронизированы', 'success');
-        isOnline = true;
-        return result;
-      } catch (error) {
-        console.error('Ошибка при сохранении сделок:', error);
-        updateSyncStatus('Ошибка синхронизации', 'error');
-        isOnline = false;
-        localStorage.setItem('trades_backup', JSON.stringify(trades));
-      }
-    }
+async function saveTradesToServer(action = 'replace') {
+  if (!currentUser) return;
+  
+  try {
+    updateSyncStatus('Синхронизация...', 'loading');
+    
+    const url = action === 'add' ? `${SERVER_URL}/trades/add` : `${SERVER_URL}/trades`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        telegramId: currentUser.id,
+        trades: trades,
+        action: action
+      })
+    });
+    
+    if (!response.ok) throw new Error('Ошибка сохранения сделок');
+    
+    const result = await response.json();
+    updateSyncStatus('Данные синхронизированы', 'success');
+    isOnline = true;
+    return result;
+  } catch (error) {
+    console.error('Ошибка при сохранении сделок:', error);
+    updateSyncStatus('Ошибка синхронизации', 'error');
+    isOnline = false;
+    localStorage.setItem('trades_backup', JSON.stringify(trades));
+  }
+}
 
     async function loadTradesFromServer() {
       if (!currentUser) return;
@@ -1583,91 +1585,121 @@
     }
 
     function exportToCSV() {
-      if (trades.length === 0) {
-        alert("Нечего экспортировать.");
-        return;
-      }
+  if (trades.length === 0) {
+    alert("Нечего экспортировать.");
+    return;
+  }
 
-      const headers = ["Дата", "Монета", "Вход", "SL", "TP1", "TP2", "TP3", "Плечо", "R:R", "Результат (руб)", "Тип закрытия"];
-      const rows = trades.map(t => [
-        t.date, t.ticker, t.entry, t.sl, t.tp1, t.tp2, t.tp3,
-        `x${t.leverage}`, t.rr, t.profitMoney,
-        t.closedBy === 'sl' ? 'по стоп-лоссу' : 'по тейк-профиту'
-      ]);
+  const headers = ["Дата", "Тикер", "Вход", "SL", "TP1", "TP2", "TP3", "Плечо", "R:R", "Результат (руб)", "Тип закрытия", "ID"];
+  const rows = trades.map(t => [
+    t.date, 
+    t.ticker, 
+    t.entry, 
+    t.sl, 
+    t.tp1, 
+    t.tp2, 
+    t.tp3,
+    `x${t.leverage}`, 
+    t.rr, 
+    t.profitMoney,
+    t.closedBy === 'sl' ? 'по стоп-лоссу' : 'по тейк-профиту',
+    t.id // Добавляем ID для избежания дубликатов при импорте
+  ]);
 
-      const csvContent = [headers.join(";"), ...rows.map(row => row.join(";"))].join("\n");
-      const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.setAttribute("href", url);
-      link.setAttribute("download", `trading_history_${new Date().toISOString().slice(0,10)}.csv`);
-      link.click();
-    }
+  const csvContent = [headers.join(";"), ...rows.map(row => row.join(";"))].join("\n");
+  const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute("download", `trading_history_${new Date().toISOString().slice(0,10)}.csv`);
+  link.click();
+}
+
 
     function importFromCSV() {
       document.getElementById('importFile').click();
     }
 
     function handleImport(event) {
-      const file = event.target.files[0];
-      if (!file) return;
+  const file = event.target.files[0];
+  if (!file) return;
 
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        try {
-          let content = e.target.result;
-          if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    try {
+      let content = e.target.result;
+      if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
+      
+      const lines = content.split('\n');
+      const importedTrades = [];
+      
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        
+        const fields = line.split(';');
+        if (fields.length >= 10) {
+          const trade = {
+            id: generateId(),
+            date: fields[0],
+            ticker: fields[1],
+            entry: parseFloat(fields[2]) || 0,
+            sl: parseFloat(fields[3]) || 0,
+            tp1: parseFloat(fields[4]) || 0,
+            tp2: parseFloat(fields[5]) || 0,
+            tp3: parseFloat(fields[6]) || 0,
+            leverage: parseInt(fields[7].replace('x', '')) || 1,
+            rr: fields[8] || '0',
+            profitMoney: fields[9] || '0',
+            closedBy: fields[10] && fields[10].includes('стоп') ? 'sl' : 'tp'
+          };
           
-          const lines = content.split('\n');
-          const importedTrades = [];
+          // Добавляем недостающие поля
+          trade.profitUsd = (parseFloat(trade.profitMoney) / USD_RATE).toFixed(2);
+          trade.moneyRiskRub = Math.abs(parseFloat(trade.profitMoney)) * 0.1; // Примерное значение
+          trade.potentialProfitRub = parseFloat(trade.profitMoney);
+          trade.timestamp = new Date().toISOString();
+          trade.tp1_size = 100;
+          trade.tp2_size = 0;
+          trade.tp3_size = 0;
           
-          for (let i = 1; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (!line) continue;
-            
-            const fields = line.split(';');
-            if (fields.length >= 10) {
-              const trade = {
-                id: generateId(),
-                date: fields[0],
-                ticker: fields[1],
-                entry: fields[2],
-                sl: fields[3],
-                tp1: fields[4],
-                tp2: fields[5],
-                tp3: fields[6],
-                leverage: fields[7].replace('x', ''),
-                rr: fields[8],
-                profitMoney: fields[9],
-                closedBy: fields[10] && fields[10].includes('стоп') ? 'sl' : 'tp'
-              };
-              
-              trade.profitUsd = (parseFloat(trade.profitMoney) / USD_RATE).toFixed(2);
-              importedTrades.push(trade);
-            }
-          }
-          
-          if (importedTrades.length > 0) {
-            if (confirm(`Найдено ${importedTrades.length} сделок. Заменить текущую историю?`)) {
-              trades = importedTrades;
-              localStorage.setItem('trades_backup', JSON.stringify(trades));
-              updateHistory();
-              updateAnalytics();
-              renderChart();
-              alert(`Импортировано ${importedTrades.length} сделок!`);
-            }
-          } else {
-            alert("Не удалось найти сделки в файле.");
-          }
-        } catch (error) {
-          alert("Ошибка при импорте файла: " + error.message);
+          importedTrades.push(trade);
+        }
+      }
+      
+      if (importedTrades.length > 0) {
+        const userChoice = confirm(`Найдено ${importedTrades.length} сделок. Добавить к существующим? (OK - добавить, Отмена - заменить все)`);
+        
+        if (userChoice) {
+          // Добавляем к существующим
+          trades = [...trades, ...importedTrades];
+          await saveTradesToServer('add');
+          alert(`Добавлено ${importedTrades.length} сделок к существующим!`);
+        } else {
+          // Заменяем все
+          trades = importedTrades;
+          await saveTradesToServer('replace');
+          alert(`Все сделки заменены на ${importedTrades.length} импортированных!`);
         }
         
-        event.target.value = '';
-      };
-      
-      reader.readAsText(file, 'utf-8');
+        localStorage.setItem('trades_backup', JSON.stringify(trades));
+        updateHistory();
+        updateAnalytics();
+        renderChart();
+      } else {
+        alert("Не удалось найти сделки в файле.");
+      }
+    } catch (error) {
+      alert("Ошибка при импорте файла: " + error.message);
+      console.error(error);
     }
+    
+    event.target.value = '';
+  };
+  
+  reader.readAsText(file, 'utf-8');
+}
+
 
     function clearHistory() {
       if (confirm("Очистить всю историю и график?")) {
