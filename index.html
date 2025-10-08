@@ -1891,44 +1891,46 @@
     });
 
     async function initApp() {
-      // Загружаем сохраненный курс и депозит
-      loadSavedData();
-      
-      // Инициализируем TP поля
-      initTpFields();
-      
-      // Получаем актуальный курс доллара
-      await fetchExchangeRate();
-      
-      // Проверяем, открыто ли в Telegram Web App
-      checkTelegramWebApp();
-      
-      // Загружаем сделки из localStorage
-      loadTradesFromLocalStorage();
-      
-      // Проверяем авторизацию
-      const savedUser = localStorage.getItem('telegramUser');
-      if (savedUser) {
-        currentUser = JSON.parse(savedUser);
-        showUserMiniInfo(currentUser);
-      } else {
-        // Показываем подсказку для входа через Telegram
-        document.getElementById('telegramLoginPrompt').style.display = 'flex';
-      }
+  // Загружаем сохраненный курс и депозит
+  loadSavedData();
+  
+  // Инициализируем TP поля
+  initTpFields();
+  
+  // Получаем актуальный курс доллара
+  await fetchExchangeRate();
+  
+  // Проверяем, открыто ли в Telegram Web App
+  checkTelegramWebApp();
+  
+  // Загружаем сделки из localStorage
+  loadTradesFromLocalStorage();
+  
+  // Проверяем авторизацию
+  const savedUser = localStorage.getItem('telegramUser');
+  if (savedUser) {
+    currentUser = JSON.parse(savedUser);
+    showUserMiniInfo(currentUser);
+    // Синхронизируем данные при загрузке
+    await syncData();
+  } else {
+    // Показываем подсказку для входа через Telegram
+    document.getElementById('telegramLoginPrompt').style.display = 'flex';
+  }
 
-      updateCurrentBalance();
-      updateHistory();
-      updateAnalytics();
-      renderChart();
+  updateCurrentBalance();
+  updateHistory();
+  updateAnalytics();
+  renderChart();
 
-      const isDark = localStorage.getItem('darkMode') === 'true';
-      enableDarkMode(isDark);
+  const isDark = localStorage.getItem('darkMode') === 'true';
+  enableDarkMode(isDark);
 
-      document.getElementById('importFile').addEventListener('change', handleImport);
-      
-      // Слушатели для депозита
-      setupDepositListeners();
-    }
+  document.getElementById('importFile').addEventListener('change', handleImport);
+  
+  // Слушатели для депозита
+  setupDepositListeners();
+}
 
     // Инициализация TP полей
     function initTpFields() {
@@ -2239,68 +2241,94 @@
         console.error('Ошибка при сохранении пользователя:', error);
       }
     }
-
-    async function saveTradesToServer(action = 'replace') {
-      if (!currentUser) return;
-      
-      try {
-        updateSyncStatusMini('Синхронизация...', 'loading');
-        
-        const url = action === 'add' ? `${SERVER_URL}/trades/add` : `${SERVER_URL}/trades`;
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            telegramId: currentUser.id,
-            trades: trades,
-            action: action
-          })
-        });
-        
-        if (!response.ok) throw new Error('Ошибка сохранения сделок');
-        
-        const result = await response.json();
-        updateSyncStatusMini('Данные синхронизированы', 'success');
-        isOnline = true;
-        return result;
-      } catch (error) {
-        console.error('Ошибка при сохранении сделок:', error);
-        updateSyncStatusMini('Ошибка синхронизации', 'error');
-        isOnline = false;
-        saveTradesToLocalStorage();
-      }
+// Добавьте эту функцию для синхронизации данных
+async function syncData() {
+  if (currentUser) {
+    try {
+      updateSyncStatusMini('Синхронизация...', 'loading');
+      await saveTradesToServer('replace');
+      await loadTradesFromServer();
+      updateSyncStatusMini('Данные синхронизированы', 'success');
+    } catch (error) {
+      console.error('Ошибка синхронизации:', error);
+      updateSyncStatusMini('Ошибка синхронизации', 'error');
     }
+  }
+}
 
-    async function loadTradesFromServer() {
-      if (!currentUser) return;
+
+
+
+    async function saveTrade() {
+  if (!currentCalculation) {
+    alert("Сначала выполните расчёт.");
+    return;
+  }
+
+  try {
+    // Собираем TP из динамических полей
+    const tpElements = document.querySelectorAll('.tp-section');
+    const tps = [];
+    
+    tpElements.forEach(section => {
+      const priceInput = section.querySelector('.tp-price');
+      const sizeInput = section.querySelector('.tp-size');
+      const price = parseFloat(priceInput.value) || 0;
+      const size = parseFloat(sizeInput.value) || 0;
       
-      try {
-        updateSyncStatusMini('Загрузка данных...', 'loading');
-        
-        const response = await fetch(`${SERVER_URL}/trades/${currentUser.id}`);
-        
-        if (!response.ok) {
-          loadTradesFromLocalStorage();
-          updateSyncStatusMini('Загружено из локального хранилища', 'warning');
-          return;
-        }
-        
-        const data = await response.json();
-        trades = data.trades || [];
-        updateSyncStatusMini('Данные загружены', 'success');
-        isOnline = true;
-        
-        saveTradesToLocalStorage();
-        updateCurrentBalance();
-        updateHistory();
-        updateAnalytics();
-        renderChart();
-      } catch (error) {
-        console.error('Ошибка при загрузке сделок:', error);
-        loadTradesFromLocalStorage();
-        updateSyncStatusMini('Офлайн режим', 'error');
-        isOnline = false;
+      if (price > 0) {
+        tps.push({ price, size });
       }
+    });
+
+    // Используем tps из расчета, если они есть, иначе из полей формы
+    const calculationTps = currentCalculation.tps || tps;
+
+    const trade = {
+      id: generateId(),
+      date: new Date().toLocaleString('ru-RU'),
+      timestamp: new Date().toISOString(),
+      ticker: document.getElementById("resultTicker").textContent,
+      entry: parseFloat(document.getElementById("entry").value),
+      sl: parseFloat(document.getElementById("sl").value),
+      tps: calculationTps, // Исправлено здесь
+      leverage: parseInt(document.getElementById("leverage").value),
+      rr: currentCalculation.rr,
+      profitMoney: currentCalculation.profitRub.toFixed(2),
+      profitUsd: currentCalculation.profitUsd.toFixed(2),
+      moneyRiskRub: currentCalculation.moneyRiskRub,
+      potentialProfitRub: currentCalculation.profitRub,
+      closedBy: 'tp'
+    };
+
+    trades.push(trade);
+    
+    // Сохраняем на сервер если авторизован, иначе локально
+    if (currentUser) {
+      await saveTradesToServer();
+    } else {
+      saveTradesToLocalStorage();
+    }
+    
+    updateCurrentBalance();
+    updateHistory();
+    updateAnalytics();
+    renderChart();
+    
+    // Показываем уведомление
+    if (isTelegramWebApp && window.Telegram.WebApp.showPopup) {
+      window.Telegram.WebApp.showPopup({
+        title: 'Сделка сохранена!',
+        message: `Тикер: ${trade.ticker}\nПотенциальная прибыль: ${trade.profitMoney} руб`,
+        buttons: [{ type: 'ok' }]
+      });
+    } else {
+      showNotification('Сделка сохранена!', 'success');
+    }
+  } catch (error) {
+    alert("Ошибка при сохранении сделки: " + error.message);
+    console.error(error);
+  }
     }
 
     // Локальное хранение сделок
@@ -2657,50 +2685,54 @@
     }
 
     // Функции истории сделок
-    function updateHistory() {
-      const tbody = document.getElementById("historyBody");
-      const mobileHistory = document.getElementById("mobileHistory");
+function updateHistory() {
+  const tbody = document.getElementById("historyBody");
+  const mobileHistory = document.getElementById("mobileHistory");
+  
+  if (!trades || trades.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty">Пока нет сделок</td></tr>';
+    mobileHistory.innerHTML = '<div class="empty">Пока нет сделок</div>';
+    return;
+  }
+
+  // Десктоп версия
+  tbody.innerHTML = '';
+  trades.forEach((t, index) => {
+    try {
+      const row = document.createElement("tr");
+      const isProfit = parseFloat(t.profitMoney || 0) >= 0;
+      const profitClass = isProfit ? 'profit-positive' : 'profit-negative';
       
-      if (trades.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="empty">Пока нет сделок</td></tr>';
-        mobileHistory.innerHTML = '<div class="empty">Пока нет сделок</div>';
-        return;
+      let entryExitText = `${t.entry || 0} → `;
+      if (t.closedBy === 'tp' && t.tps) {
+        entryExitText += `TP: ${t.tps.map(tp => tp.price).join(', ')}`;
+      } else {
+        entryExitText += `SL: ${t.sl || 0}`;
       }
 
-      // Десктоп версия
-      tbody.innerHTML = '';
-      trades.forEach((t, index) => {
-        const row = document.createElement("tr");
-        const isProfit = parseFloat(t.profitMoney) >= 0;
-        const profitClass = isProfit ? 'profit-positive' : 'profit-negative';
-        
-        let entryExitText = `${t.entry} → `;
-        if (t.closedBy === 'tp') {
-          entryExitText += `TP: ${t.tps.map(tp => tp.price).join(', ')}`;
-        } else {
-          entryExitText += `SL: ${t.sl}`;
-        }
-
-        row.innerHTML = `
-          <td>${t.date}</td>
-          <td>${t.ticker}</td>
-          <td>${entryExitText}</td>
-          <td class="${t.rr >= 2 ? 'rr-good' : t.rr >= 1 ? 'rr-warn' : ''}">${t.rr}</td>
-          <td class="${profitClass}">${t.profitMoney} руб</td>
-          <td>
-            <select class="close-type-select" onchange="updateTradeCloseType(${index}, this.value)">
-              <option value="tp" ${t.closedBy === 'tp' ? 'selected' : ''}>по TP</option>
-              <option value="sl" ${t.closedBy === 'sl' ? 'selected' : ''}>по стопу</option>
-            </select>
-          </td>
-          <td>x${t.leverage}</td>
-          <td>
-            <button class="edit-trade" onclick="editTrade(${index})" title="Редактировать">✎</button>
-            <button class="delete-trade" onclick="deleteTrade(${index})" title="Удалить">×</button>
-          </td>
-        `;
-        tbody.appendChild(row);
-      });
+      row.innerHTML = `
+        <td>${t.date || 'Неизвестно'}</td>
+        <td>${t.ticker || 'Unknown'}</td>
+        <td>${entryExitText}</td>
+        <td class="${t.rr >= 2 ? 'rr-good' : t.rr >= 1 ? 'rr-warn' : ''}">${t.rr || 0}</td>
+        <td class="${profitClass}">${t.profitMoney || 0} руб</td>
+        <td>
+          <select class="close-type-select" onchange="updateTradeCloseType(${index}, this.value)">
+            <option value="tp" ${t.closedBy === 'tp' ? 'selected' : ''}>по TP</option>
+            <option value="sl" ${t.closedBy === 'sl' ? 'selected' : ''}>по стопу</option>
+          </select>
+        </td>
+        <td>x${t.leverage || 1}</td>
+        <td>
+          <button class="edit-trade" onclick="editTrade(${index})" title="Редактировать">✎</button>
+          <button class="delete-trade" onclick="deleteTrade(${index})" title="Удалить">×</button>
+        </td>
+      `;
+      tbody.appendChild(row);
+    } catch (error) {
+      console.error('Ошибка при отображении сделки:', t, error);
+    }
+  });
 
       // Мобильная версия
       mobileHistory.innerHTML = '';
@@ -2956,7 +2988,7 @@
       let content = e.target.result;
       if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
       
-      const lines = content.split('\n');
+      const lines = content.split('\n').filter(line => line.trim() !== '');
       const importedTrades = [];
       
       for (let i = 1; i < lines.length; i++) {
@@ -2964,33 +2996,41 @@
         if (!line) continue;
         
         const fields = line.split(';');
-        if (fields.length >= 6) {
-          // Парсим TPs с проверкой на существование поля
+        if (fields.length < 6) continue; // Минимум 6 полей
+
+        try {
+          // Парсим TPs - исправленная логика
           const tps = [];
-          const tpField = fields[4] || ''; // Защита от undefined
-          const tpFields = tpField.split(';');
-          
-          tpFields.forEach(tpField => {
-            if (tpField && tpField.includes(':')) {
-              const [price, size] = tpField.split(':');
+          const tpField = fields[4] || '';
+          if (tpField) {
+            const tpPairs = tpField.split(';');
+            tpPairs.forEach(tpPair => {
+              const [price, size] = tpPair.split(':');
               if (price && size) {
                 tps.push({
-                  price: parseFloat(price) || 0,
-                  size: parseFloat(size) || 0
+                  price: parseFloat(price.replace(',', '.')) || 0,
+                  size: parseFloat(size.replace(',', '.')) || 0
                 });
               }
-            }
-          });
+            });
+          }
 
-          // Создаем trade с проверками всех полей
+          // Если нет TP, создаем один из полей если они есть
+          if (tps.length === 0 && fields.length > 4) {
+            const tpPrice = parseFloat(fields[4]) || 0;
+            if (tpPrice > 0) {
+              tps.push({ price: tpPrice, size: 100 });
+            }
+          }
+
           const trade = {
             id: fields[9] || generateId(),
             date: fields[0] || new Date().toLocaleString('ru-RU'),
             ticker: fields[1] || 'Unknown',
-            entry: parseFloat(fields[2]) || 0,
-            sl: parseFloat(fields[3]) || 0,
+            entry: parseFloat(fields[2].replace(',', '.')) || 0,
+            sl: parseFloat(fields[3].replace(',', '.')) || 0,
             tps: tps,
-            leverage: parseInt((fields[5] || '').replace('x', '')) || 1,
+            leverage: parseInt(fields[5]?.replace('x', '')) || 1,
             rr: fields[6] || '0',
             profitMoney: fields[7] || '0',
             closedBy: (fields[8] && fields[8].includes('стоп')) ? 'sl' : 'tp',
@@ -3001,8 +3041,9 @@
           };
           
           importedTrades.push(trade);
-        } else {
-          console.warn('Пропущена строка с недостаточным количеством полей:', line);
+        } catch (parseError) {
+          console.warn('Ошибка парсинга строки:', line, parseError);
+          continue;
         }
       }
       
@@ -3037,19 +3078,18 @@
         updateAnalytics();
         renderChart();
       } else {
-        alert("Не удалось найти сделки в файле. Проверьте формат CSV.");
+        alert("Не удалось найти сделки в файле. Проверьте формат файла.");
       }
     } catch (error) {
       alert("Ошибка при импорте файла: " + error.message);
-      console.error("Ошибка импорта:", error);
+      console.error(error);
     }
     
     event.target.value = '';
   };
   
   reader.readAsText(file, 'utf-8');
-   }
-  
+}
 
     function clearHistory() {
       if (confirm("Очистить всю историю и график?")) {
