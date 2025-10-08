@@ -1181,6 +1181,35 @@
       }
     }
 
+    /* DONATE BUTTON STYLES */
+    .donate-section {
+      text-align: center;
+      padding: 20px;
+      margin-top: auto;
+    }
+    .donate-button {
+      background: linear-gradient(135deg, #ff9500, #ff5e3a);
+      color: white;
+      border: none;
+      padding: 14px 28px;
+      font-size: 16px;
+      font-weight: 600;
+      border-radius: 50px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 4px 15px rgba(255, 94, 58, 0.4);
+      transition: all 0.3s ease;
+    }
+    .donate-button:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 6px 20px rgba(255, 94, 58, 0.6);
+    }
+    .donate-button:active {
+      transform: translateY(0);
+    }
+
   </style>
 </head>
 <body>
@@ -3294,8 +3323,17 @@ function updateMobileHistory() {
       const isCurrentlyDark = document.body.classList.contains('dark-mode');
       enableDarkMode(!isCurrentlyDark);
     });
-  </script>
 
-@archlsv
+    
+<!-- DONATE BUTTON AT BOTTOM -->
+<div class="donate-section">
+  <button class="donate-button" onclick="window.open('https://t.me/archlsv/send?user_id=archlsv', '_blank')">
+    ⭐ Донат автору
+  </button>
+    
+  </script>
+  
+
+</div>
 </body>
 </html>
