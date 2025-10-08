@@ -1244,8 +1244,8 @@
       <div class="balance-section">
         <label style="font-weight: bold; color: var(--btn-primary);">💰 Текущий баланс:</label>
         <div class="balance-display">
-          <span id="currentBalanceRub">100000.00 руб</span>
-          <span id="currentBalanceUsd">1050.00 USD</span>
+          <span id="currentBalanceRub">0.00 руб</span>
+          <span id="currentBalanceUsd">0.00 USD</span>
         </div>
         <div class="balance-label">
           (Начальный депозит + результат торгов)
@@ -1294,7 +1294,7 @@
           <option value="10">x10</option>
           <option value="20">x20</option>
           <option value="50">x50</option>
-          <option value="100" selected>x100</option>
+          <option value="5" selected>x5</option>
         </select>
       </div>
 
@@ -1532,13 +1532,23 @@
     const BOT_USERNAME = 'rrcalc_bot';
     
     // Глобальные переменные
-    let trades = [];
-    let profitChart = null;
-    let currentCalculation = null;
-    let currentUser = null;
-    let isOnline = false;
-    let isTelegramWebApp = false;
-    let USD_RATE = 95; // Будет обновляться автоматически
+let trades = [];
+let profitChart = null;
+let currentCalculation = null;
+let currentUser = null;
+let isOnline = false;
+let isTelegramWebApp = false;
+let USD_RATE = 95;
+
+// Безопасная проверка Telegram Web App
+function safeTelegramCheck() {
+  try {
+    return !!(window.Telegram && window.Telegram.WebApp);
+  } catch (error) {
+    console.warn('Telegram check failed:', error);
+    return false;
+  }
+}
 
         // Глобальные переменные для расширенной аналитики
     let distributionChart = null;
@@ -1905,7 +1915,12 @@
   
   // Загружаем сделки из localStorage
   loadTradesFromLocalStorage();
-  
+
+    // Проверяем, открыто ли в Telegram Web App (безопасно)
+  isTelegramWebApp = safeTelegramCheck();
+  if (isTelegramWebApp) {
+    checkTelegramWebApp();
+  }
   // Проверяем авторизацию
   const savedUser = localStorage.getItem('telegramUser');
   if (savedUser) {
@@ -1917,6 +1932,7 @@
     // Показываем подсказку для входа через Telegram
     document.getElementById('telegramLoginPrompt').style.display = 'flex';
   }
+
 
   updateCurrentBalance();
   updateHistory();
@@ -2074,33 +2090,47 @@
 
     // Функция для показа уведомлений
     function showNotification(message, type = 'info') {
-      // Создаем временное уведомление
-      const notification = document.createElement('div');
-      notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: ${type === 'success' ? '#27ae60' : type === 'error' ? '#e74c3c' : '#3498db'};
-        color: white;
-        padding: 12px 20px;
-        border-radius: 10px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-        z-index: 1001;
-        text-align: center;
-        max-width: 90%;
-        font-weight: 600;
-      `;
-      notification.textContent = message;
-      document.body.appendChild(notification);
-      
-      // Автоматически скрываем через 3 секунды
-      setTimeout(() => {
-        if (notification.parentElement) {
-          notification.remove();
-        }
-      }, 3000);
+  // Пытаемся использовать Telegram Web App если доступно
+  if (isTelegramWebApp && window.Telegram?.WebApp?.showPopup) {
+    try {
+      window.Telegram.WebApp.showPopup({
+        title: type === 'success' ? 'Успех' : type === 'error' ? 'Ошибка' : 'Информация',
+        message: message,
+        buttons: [{ type: 'ok' }]
+      });
+      return;
+    } catch (error) {
+      console.warn('Telegram popup failed, using fallback:', error);
     }
+  }
+  
+  // Fallback: создаем временное уведомление
+  const notification = document.createElement('div');
+  notification.style.cssText = `
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: ${type === 'success' ? '#27ae60' : type === 'error' ? '#e74c3c' : '#3498db'};
+    color: white;
+    padding: 12px 20px;
+    border-radius: 10px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    z-index: 1001;
+    text-align: center;
+    max-width: 90%;
+    font-weight: 600;
+  `;
+  notification.textContent = message;
+  document.body.appendChild(notification);
+  
+  // Автоматически скрываем через 3 секунды
+  setTimeout(() => {
+    if (notification.parentElement) {
+      notification.remove();
+    }
+  }, 3000);
+}
 
     // Функция для открытия Telegram
     function openTelegram() {
@@ -2109,59 +2139,63 @@
 
     // Проверка Telegram Web App
     function checkTelegramWebApp() {
-      if (window.Telegram && window.Telegram.WebApp) {
-        isTelegramWebApp = true;
-        const tg = window.Telegram.WebApp;
+  if (window.Telegram && window.Telegram.WebApp) {
+    isTelegramWebApp = true;
+    const tg = window.Telegram.WebApp;
+    
+    try {
+      // Безопасная инициализация Telegram Web App
+      if (typeof tg.ready === 'function') tg.ready();
+      if (typeof tg.expand === 'function') tg.expand();
+      
+      // Проверяем данные пользователя
+      const user = tg.initDataUnsafe?.user;
+      if (user) {
+        const telegramUser = {
+          id: user.id.toString(),
+          first_name: user.first_name,
+          username: user.username,
+          photo_url: user.photo_url,
+          language_code: user.language_code,
+          is_premium: user.is_premium || false
+        };
         
-        // Инициализируем Telegram Web App
-        tg.ready();
-        tg.expand();
-        
-        // Проверяем данные пользователя
-        const user = tg.initDataUnsafe?.user;
-        if (user) {
-          const telegramUser = {
-            id: user.id.toString(),
-            first_name: user.first_name,
-            username: user.username,
-            photo_url: user.photo_url,
-            language_code: user.language_code,
-            is_premium: user.is_premium || false
-          };
-          
-          handleTelegramAuth(telegramUser);
-        }
-        
-        // Настраиваем внешний вид под Telegram
-        setupTelegramTheme(tg);
+        handleTelegramAuth(telegramUser);
       }
+      
+      // Настраиваем внешний вид под Telegram
+      setupTelegramTheme(tg);
+    } catch (error) {
+      console.warn('Telegram WebApp methods not fully supported:', error);
+      isTelegramWebApp = false;
     }
+  } else {
+    isTelegramWebApp = false;
+  }
+}
 
     function setupTelegramTheme(tg) {
+  try {
+    if (typeof tg.setHeaderColor === 'function') {
       tg.setHeaderColor('#0088cc');
+    }
+    if (typeof tg.setBackgroundColor === 'function') {
       tg.setBackgroundColor('#f7f9fc');
-      
+    }
+    
+    if (typeof tg.onEvent === 'function') {
       tg.onEvent('themeChanged', () => {
         const isDark = tg.colorScheme === 'dark';
         enableDarkMode(isDark);
       });
-      
-      const isDark = tg.colorScheme === 'dark';
-      enableDarkMode(isDark);
     }
-
-    // Функции авторизации
-    function handleTelegramAuth(user) {
-      currentUser = user;
-      localStorage.setItem('telegramUser', JSON.stringify(user));
-      showUserMiniInfo(user);
-      
-      // Скрываем подсказку для входа
-      document.getElementById('telegramLoginPrompt').style.display = 'none';
-      
-      saveUserToServer(user);
-      loadTradesFromServer();
-    }
+    
+    const isDark = tg.colorScheme === 'dark';
+    enableDarkMode(isDark);
+  } catch (error) {
+    console.warn('Telegram theme setup failed:', error);
+  }
+}
 
     function showUserMiniInfo(user) {
       const userMiniCard = document.getElementById('userMiniCard');
@@ -2178,20 +2212,30 @@
     }
 
     function logout() {
-      if (confirm("Выйти из аккаунта?")) {
-        currentUser = null;
-        localStorage.removeItem('telegramUser');
-        
-        document.getElementById('userMiniCard').style.display = 'none';
-        document.getElementById('telegramLoginPrompt').style.display = 'flex';
-        updateSyncStatusMini('', '');
-        
-        if (isTelegramWebApp) {
-          // В режиме Telegram просто обновляем страницу
+  if (confirm("Выйти из аккаунта?")) {
+    currentUser = null;
+    localStorage.removeItem('telegramUser');
+    
+    document.getElementById('userMiniCard').style.display = 'none';
+    document.getElementById('telegramLoginPrompt').style.display = 'flex';
+    updateSyncStatusMini('', '');
+    
+    if (isTelegramWebApp) {
+      try {
+        // Пытаемся закрыть Web App, если поддерживается
+        if (window.Telegram?.WebApp?.close) {
+          window.Telegram.WebApp.close();
+        } else {
+          // Иначе просто обновляем страницу
           location.reload();
         }
+      } catch (error) {
+        console.warn('Telegram close failed:', error);
+        location.reload();
       }
     }
+  }
+}
 
     // Функция для расчета текущего баланса
     function calculateCurrentBalance() {
@@ -2315,20 +2359,22 @@ async function syncData() {
     updateAnalytics();
     renderChart();
     
-    // Показываем уведомление
-    if (isTelegramWebApp && window.Telegram.WebApp.showPopup) {
-      window.Telegram.WebApp.showPopup({
-        title: 'Сделка сохранена!',
-        message: `Тикер: ${trade.ticker}\nПотенциальная прибыль: ${trade.profitMoney} руб`,
-        buttons: [{ type: 'ok' }]
-      });
-    } else {
-      showNotification('Сделка сохранена!', 'success');
-    }
+  // Показываем уведомление
+if (isTelegramWebApp && window.Telegram.WebApp.showPopup) {
+  try {
+    window.Telegram.WebApp.showPopup({
+      title: 'Сделка сохранена!',
+      message: `Тикер: ${trade.ticker}\nПотенциальная прибыль: ${trade.profitMoney} руб`,
+      buttons: [{ type: 'ok' }]
+    });
   } catch (error) {
-    alert("Ошибка при сохранении сделки: " + error.message);
-    console.error(error);
+    // Если метод не поддерживается, используем fallback
+    console.warn('Telegram WebApp popup not supported:', error);
+    showNotification(`Сделка сохранена! ${trade.ticker}: ${trade.profitMoney} руб`, 'success');
   }
+} else {
+  showNotification('Сделка сохранена!', 'success');
+}
     }
 
     // Локальное хранение сделок
@@ -2682,6 +2728,10 @@ async function syncData() {
         alert("Ошибка при сохранении сделки: " + error.message);
         console.error(error);
       }
+      
+
+
+
     }
 
     // Функции истории сделок
