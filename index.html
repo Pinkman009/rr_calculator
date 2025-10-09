@@ -2595,247 +2595,269 @@ function updateMobileHistory() {
 
     // Основные функции калькулятора
     function calculate() {
-      try {
-        const currentBalance = updateCurrentBalance();
-        const riskPercentOnTrade = parseFloat(document.getElementById("riskPercent").value);
-        const entry = parseFloat(document.getElementById("entry").value);
-        const sl = parseFloat(document.getElementById("sl").value);
-        const leverage = parseInt(document.getElementById("leverage").value);
-        const ticker = document.getElementById("ticker").value;
+  try {
+    const currentBalance = updateCurrentBalance();
+    const riskPercentOnTrade = parseFloat(document.getElementById("riskPercent").value);
+    const entry = parseFloat(document.getElementById("entry").value);
+    const sl = parseFloat(document.getElementById("sl").value);
+    const leverage = parseInt(document.getElementById("leverage").value);
+    const ticker = document.getElementById("ticker").value;
 
-        // Сбор TP из динамических полей
-        const tpElements = document.querySelectorAll('.tp-section');
-        const tps = [];
-        
-        tpElements.forEach(section => {
-          const priceInput = section.querySelector('.tp-price');
-          const sizeInput = section.querySelector('.tp-size');
-          const price = parseFloat(priceInput.value) || 0;
-          const size = parseFloat(sizeInput.value) || 0;
-          
-          if (price > 0) {
-            tps.push({ price, size });
-          }
-        });
-
-        if (!entry || !sl) {
-          alert("Заполните цену входа и стоп-лосс.");
-          return;
-        }
-
-        if (tps.length === 0) {
-          alert("Добавьте хотя бы один TP!");
-          return;
-        }
-
-        const totalTP = tps.reduce((sum, tp) => sum + tp.size, 0);
-        if (totalTP !== 100) {
-          alert("Сумма TP должна быть 100%!");
-          return;
-        }
-
-        // Расчет денежного риска (от текущего баланса!)
-        const moneyRiskRub = (currentBalance * riskPercentOnTrade) / 100;
-        const moneyRiskUsd = moneyRiskRub / USD_RATE;
-
-        // Расчет процента риска от цены
-        let priceRiskPercent;
-        if (entry > sl) {
-          priceRiskPercent = ((entry - sl) / entry) * 100;
-        } else {
-          priceRiskPercent = ((sl - entry) / entry) * 100;
-        }
-
-        // Расчет потенциальной прибыли в процентах от цены
-        let priceProfitPercent = 0;
-        if (entry > sl) {
-          tps.forEach(tp => {
-            if (tp.price > entry) priceProfitPercent += ((tp.price - entry) / entry) * (tp.size / 100);
-          });
-        } else {
-          tps.forEach(tp => {
-            if (tp.price < entry) priceProfitPercent += ((entry - tp.price) / entry) * (tp.size / 100);
-          });
-        }
-        priceProfitPercent *= 100;
-
-        // Расчет R:R
-        const rr = priceProfitPercent / priceRiskPercent;
-
-        // Расчет размера позиции
-        const positionSizeUSDT = moneyRiskUsd / (priceRiskPercent / 100);
-        
-        // Расчет прибыли
-        const profitUsd = positionSizeUSDT * (priceProfitPercent / 100) * leverage;
-        const profitRub = profitUsd * USD_RATE;
-        
-        // Прибыль в процентах от баланса
-        const profitPercentBalance = (profitRub / currentBalance) * 100;
-
-        // РАСЧЕТЫ ДЛЯ БЕЗОПАСНОСТИ (используем текущий баланс!)
-        // Размер позиции в % от баланса
-        const positionSizePercent = (positionSizeUSDT * USD_RATE / currentBalance) * 100;
-        
-        // Использование маржи (%)
-        const marginUsage = (positionSizeUSDT * USD_RATE * leverage / currentBalance) * 100;
-        
-        // Свободная маржа после сделки (от текущего баланса!)
-        const freeMarginAfter = currentBalance - (positionSizeUSDT * USD_RATE * leverage / 100);
-        
-        // Максимальное использование депозита
-        const maxDepositUsage = Math.min(marginUsage, 100);
-        
-        // Рекомендуемый объем позиции (не более 30% от баланса с учетом плеча)
-        const recommendedPositionSize = (currentBalance * 0.3) / (USD_RATE * leverage);
-
-        // Сохраняем расчет
-        currentCalculation = {
-          moneyRiskRub,
-          moneyRiskUsd,
-          priceRiskPercent,
-          priceProfitPercent,
-          rr: rr.toFixed(2),
-          leverage,
-          profitRub,
-          profitUsd,
-          profitPercentBalance,
-          positionSizeUSDT,
-          positionSizePercent,
-          marginUsage,
-          freeMarginAfter,
-          maxDepositUsage,
-          recommendedPositionSize,
-          tps: tps
-        };
-
-        // Обновляем интерфейс
-        document.getElementById("resultTicker").textContent = ticker;
-        document.getElementById("moneyRisk").textContent = moneyRiskRub.toFixed(2);
-        document.getElementById("moneyRiskUsd").textContent = moneyRiskUsd.toFixed(2);
-        document.getElementById("riskPercentVal").textContent = priceRiskPercent.toFixed(2);
-        document.getElementById("profitPercentVal").textContent = priceProfitPercent.toFixed(2);
-        document.getElementById("rrValue").textContent = rr.toFixed(2);
-        document.getElementById("leverageUsed").textContent = leverage;
-        document.getElementById("profitMoney").textContent = profitRub.toFixed(2);
-        document.getElementById("profitUsd").textContent = profitUsd.toFixed(2);
-        document.getElementById("profitPercentDeposit").textContent = profitPercentBalance.toFixed(2);
-        document.getElementById("positionSize").textContent = positionSizeUSDT.toFixed(2);
-
-        // НОВЫЕ ПОЛЯ
-        document.getElementById("positionSizePercent").textContent = positionSizePercent.toFixed(2);
-        document.getElementById("marginUsage").textContent = marginUsage.toFixed(2);
-        document.getElementById("freeMarginAfter").textContent = freeMarginAfter.toFixed(2);
-        document.getElementById("maxDepositUsage").textContent = maxDepositUsage.toFixed(2);
-        document.getElementById("recommendedPositionSize").textContent = recommendedPositionSize.toFixed(2);
-
-        const rrEl = document.getElementById("rrValue");
-        rrEl.className = rr >= 2 ? "rr-good" : rr >= 1 ? "rr-warn" : "";
-
-        // Проверка предупреждений
-        checkSafetyWarnings(positionSizePercent, marginUsage, riskPercentOnTrade, leverage);
-
-        document.getElementById("result").style.display = "block";
-      } catch (error) {
-        alert("Ошибка при расчете: " + error.message);
-        console.error(error);
-      }
-    }
-
-    // Функция: Проверка безопасности сделки
-    function checkSafetyWarnings(positionSizePercent, marginUsage, riskPercent, leverage) {
-      const warningsSection = document.getElementById("warningsSection");
-      const warningsList = document.getElementById("warningsList");
-      warningsList.innerHTML = '';
+    // Сбор TP из динамических полей
+    const tpElements = document.querySelectorAll('.tp-section');
+    const tps = [];
+    
+    tpElements.forEach(section => {
+      const priceInput = section.querySelector('.tp-price');
+      const sizeInput = section.querySelector('.tp-size');
+      const price = parseFloat(priceInput.value) || 0;
+      const size = parseFloat(sizeInput.value) || 0;
       
-      let hasWarnings = false;
-      let warnings = [];
-
-      // Проверка риска на сделку
-      if (riskPercent > 3) {
-        warnings.push({
-          level: 'high',
-          message: '❌ Высокий риск на сделку (>3%). Рекомендуется 1-2%'
-        });
-      } else if (riskPercent > 2) {
-        warnings.push({
-          level: 'medium',
-          message: '⚠️ Повышенный риск на сделку (>2%). Будьте осторожны'
-        });
+      if (price > 0) {
+        tps.push({ price, size });
       }
+    });
 
-      // Проверка использования маржи
-      if (marginUsage > 80) {
-        warnings.push({
-          level: 'high',
-          message: '❌ Очень высокое использование маржи (>80%). Риск маржин-колла'
-        });
-      } else if (marginUsage > 50) {
-        warnings.push({
-          level: 'medium',
-          message: '⚠️ Высокое использование маржи (>50%). Ограничьте объем'
-        });
-      }
-
-      // Проверка размера позиции
-      if (positionSizePercent > 50) {
-        warnings.push({
-          level: 'high',
-          message: '❌ Слишком крупная позиция (>50% баланса). Диверсифицируйте'
-        });
-      } else if (positionSizePercent > 30) {
-        warnings.push({
-          level: 'medium',
-          message: '⚠️ Крупная позиция (>30% баланса). Увеличьте депозит'
-        });
-      }
-
-      // Проверка плеча
-      if (leverage > 50) {
-        warnings.push({
-          level: 'high',
-          message: '❌ Очень высокое плечо (>50x). Высокий риск ликвидации'
-        });
-      } else if (leverage > 20) {
-        warnings.push({
-          level: 'medium',
-          message: '⚠️ Высокое плечо (>20x). Увеличьте стоп-лосс'
-        });
-      }
-
-      // Проверка R:R
-      const rr = parseFloat(document.getElementById("rrValue").textContent);
-      if (rr < 1) {
-        warnings.push({
-          level: 'high',
-          message: '❌ Низкое соотношение R:R (<1). Сделка невыгодна'
-        });
-      } else if (rr < 1.5) {
-        warnings.push({
-          level: 'medium',
-          message: '⚠️ Низкое соотношение R:R (<1.5). Улучшите тейк-профит'
-        });
-      }
-
-      // Отображение предупреждений
-      if (warnings.length > 0) {
-        hasWarnings = true;
-        warnings.forEach(warning => {
-          const warningElement = document.createElement('div');
-          warningElement.className = `warning-item warning-${warning.level}`;
-          warningElement.textContent = warning.message;
-          warningsList.appendChild(warningElement);
-        });
-      }
-
-      // Показываем/скрываем секцию предупреждений
-      if (hasWarnings) {
-        warningsSection.style.display = 'block';
-        warningsSection.style.background = '#fff3cd';
-        warningsSection.style.borderColor = '#ffeaa7';
-      } else {
-        warningsSection.style.display = 'none';
-      }
+    if (!entry || !sl) {
+      alert("Заполните цену входа и стоп-лосс.");
+      return;
     }
+
+    if (tps.length === 0) {
+      alert("Добавьте хотя бы один TP!");
+      return;
+    }
+
+    const totalTP = tps.reduce((sum, tp) => sum + tp.size, 0);
+    if (totalTP !== 100) {
+      alert("Сумма TP должна быть 100%!");
+      return;
+    }
+
+        // 1. Расчет денежного риска (исправленная формула)
+    const moneyRiskRub = (currentBalance * riskPercentOnTrade) / 100;
+    const moneyRiskUsd = moneyRiskRub / USD_RATE;
+
+    // 2. Расчет процента риска от цены
+    let priceRiskPercent;
+    if (entry > sl) {
+      priceRiskPercent = ((entry - sl) / entry) * 100;
+    } else {
+      priceRiskPercent = ((sl - entry) / entry) * 100;
+    }
+
+    // 3. Расчет потенциальной прибыли в процентах от цены
+    let priceProfitPercent = 0;
+    let weightedProfitPercent = 0;
+    
+    if (entry > sl) {
+      // LONG позиция
+      tps.forEach(tp => {
+        if (tp.price > entry) {
+          const tpProfitPercent = ((tp.price - entry) / entry) * 100;
+          weightedProfitPercent += tpProfitPercent * (tp.size / 100);
+        }
+      });
+    } else {
+      // SHORT позиция  
+      tps.forEach(tp => {
+        if (tp.price < entry) {
+          const tpProfitPercent = ((entry - tp.price) / entry) * 100;
+          weightedProfitPercent += tpProfitPercent * (tp.size / 100);
+        }
+      });
+    }
+    
+    priceProfitPercent = weightedProfitPercent;
+
+    // 4. Расчет R:R
+    const rr = priceProfitPercent / priceRiskPercent;
+
+    // 5. КОРРЕКТНЫЙ расчет размера позиции
+    const positionSizeUSDT = moneyRiskUsd / (priceRiskPercent / 100);
+    
+    // 6. КОРРЕКТНЫЙ расчет прибыли
+    const profitUsd = positionSizeUSDT * (priceProfitPercent / 100);
+    const profitRub = profitUsd * USD_RATE;
+    
+    // 7. Прибыль в процентах от баланса
+    const profitPercentBalance = (profitRub / currentBalance) * 100;
+
+    // 8. КОРРЕКТНЫЕ РАСЧЕТЫ ДЛЯ БЕЗОПАСНОСТИ
+    
+    // Размер позиции в USDT в рублях
+    const positionSizeRub = positionSizeUSDT * USD_RATE;
+    
+    // Размер позиции в % от баланса
+    const positionSizePercent = (positionSizeRub / currentBalance) * 100;
+    
+    // Использование маржи (%) - ОСНОВНОЙ ПОКАЗАТЕЛЬ
+    const marginUsage = (positionSizeRub / leverage / currentBalance) * 100;
+    
+    // Свободная маржа после сделки
+    const marginUsed = positionSizeRub / leverage;
+    const freeMarginAfter = currentBalance - marginUsed;
+    
+    // Максимальное использование депозита
+    const maxDepositUsage = Math.min(marginUsage, 100);
+    
+    // Рекомендуемый объем позиции (не более 30% от баланса с учетом плеча)
+    const maxRecommendedPositionRub = currentBalance * 0.3 * leverage;
+    const recommendedPositionSize = maxRecommendedPositionRub / USD_RATE;
+
+    // Сохраняем расчет
+    currentCalculation = {
+      moneyRiskRub,
+      moneyRiskUsd,
+      priceRiskPercent,
+      priceProfitPercent,
+      rr: rr.toFixed(2),
+      leverage,
+      profitRub,
+      profitUsd,
+      profitPercentBalance,
+      positionSizeUSDT,
+      positionSizePercent,
+      marginUsage,
+      freeMarginAfter,
+      maxDepositUsage,
+      recommendedPositionSize,
+      tps: tps
+    };
+
+    // Обновляем интерфейс
+    document.getElementById("resultTicker").textContent = ticker;
+    document.getElementById("moneyRisk").textContent = moneyRiskRub.toFixed(2);
+    document.getElementById("moneyRiskUsd").textContent = moneyRiskUsd.toFixed(2);
+    document.getElementById("riskPercentVal").textContent = priceRiskPercent.toFixed(2);
+    document.getElementById("profitPercentVal").textContent = priceProfitPercent.toFixed(2);
+    document.getElementById("rrValue").textContent = rr.toFixed(2);
+    document.getElementById("leverageUsed").textContent = leverage;
+    document.getElementById("profitMoney").textContent = profitRub.toFixed(2);
+    document.getElementById("profitUsd").textContent = profitUsd.toFixed(2);
+    document.getElementById("profitPercentDeposit").textContent = profitPercentBalance.toFixed(2);
+    document.getElementById("positionSize").textContent = positionSizeUSDT.toFixed(2);
+
+    // НОВЫЕ ПОЛЯ с корректными значениями
+    document.getElementById("positionSizePercent").textContent = positionSizePercent.toFixed(2);
+    document.getElementById("marginUsage").textContent = marginUsage.toFixed(2);
+    document.getElementById("freeMarginAfter").textContent = freeMarginAfter.toFixed(2);
+    document.getElementById("maxDepositUsage").textContent = maxDepositUsage.toFixed(2);
+    document.getElementById("recommendedPositionSize").textContent = recommendedPositionSize.toFixed(2);
+
+    const rrEl = document.getElementById("rrValue");
+    rrEl.className = rr >= 2 ? "rr-good" : rr >= 1 ? "rr-warn" : "";
+
+    // Проверка предупреждений с обновленными значениями
+    checkSafetyWarnings(positionSizePercent, marginUsage, riskPercentOnTrade, leverage, freeMarginAfter);
+
+    document.getElementById("result").style.display = "block";
+  } catch (error) {
+    alert("Ошибка при расчете: " + error.message);
+    console.error(error);
+  }
+}
+
+    function checkSafetyWarnings(positionSizePercent, marginUsage, riskPercent, leverage, freeMarginAfter) {
+  const warningsSection = document.getElementById("warningsSection");
+  const warningsList = document.getElementById("warningsList");
+  warningsList.innerHTML = '';
+  
+  let hasWarnings = false;
+  let warnings = [];
+
+  // Проверка недостаточности средств
+  if (freeMarginAfter < 0) {
+    warnings.push({
+      level: 'high',
+      message: '❌ НЕДОСТАТОЧНО СРЕДСТВ! Свободная маржа отрицательная'
+    });
+  }
+
+  // Проверка риска на сделку
+  if (riskPercent > 3) {
+    warnings.push({
+      level: 'high',
+      message: '❌ Высокий риск на сделку (>3%). Рекомендуется 1-2%'
+    });
+  } else if (riskPercent > 2) {
+    warnings.push({
+      level: 'medium',
+      message: '⚠️ Повышенный риск на сделку (>2%). Будьте осторожны'
+    });
+  }
+
+  // Проверка использования маржи
+  if (marginUsage > 80) {
+    warnings.push({
+      level: 'high',
+      message: '❌ Очень высокое использование маржи (>80%). Риск маржин-колла'
+    });
+  } else if (marginUsage > 50) {
+    warnings.push({
+      level: 'medium',
+      message: '⚠️ Высокое использование маржи (>50%). Ограничьте объем'
+    });
+  }
+
+  // Проверка размера позиции
+  if (positionSizePercent > 50) {
+    warnings.push({
+      level: 'high',
+      message: '❌ Слишком крупная позиция (>50% баланса). Диверсифицируйте'
+    });
+  } else if (positionSizePercent > 30) {
+    warnings.push({
+      level: 'medium',
+      message: '⚠️ Крупная позиция (>30% баланса). Увеличьте депозит'
+    });
+  }
+
+  // Проверка плеча
+  if (leverage > 50) {
+    warnings.push({
+      level: 'high',
+      message: '❌ Очень высокое плечо (>50x). Высокий риск ликвидации'
+    });
+  } else if (leverage > 20) {
+    warnings.push({
+      level: 'medium',
+      message: '⚠️ Высокое плечо (>20x). Увеличьте стоп-лосс'
+    });
+  }
+
+  // Проверка R:R
+  const rr = parseFloat(document.getElementById("rrValue").textContent);
+  if (rr < 1) {
+    warnings.push({
+      level: 'high',
+      message: '❌ Низкое соотношение R:R (<1). Сделка невыгодна'
+    });
+  } else if (rr < 1.5) {
+    warnings.push({
+      level: 'medium',
+      message: '⚠️ Низкое соотношение R:R (<1.5). Улучшите тейк-профит'
+    });
+  }
+
+  // Отображение предупреждений
+  if (warnings.length > 0) {
+    hasWarnings = true;
+    warnings.forEach(warning => {
+      const warningElement = document.createElement('div');
+      warningElement.className = `warning-item warning-${warning.level}`;
+      warningElement.textContent = warning.message;
+      warningsList.appendChild(warningElement);
+    });
+  }
+
+  // Показываем/скрываем секцию предупреждений
+  if (hasWarnings) {
+    warningsSection.style.display = 'block';
+  } else {
+    warningsSection.style.display = 'none';
+  }
+}
 
     // Функции работы со сделками
     async function saveTrade() {
